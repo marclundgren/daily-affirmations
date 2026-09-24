@@ -23,11 +23,9 @@ export function Today() {
   return (
     <main className="ambient min-h-dvh" style={{ '--hue': nextUp ? hueOf(nextUp.id) : 290 } as CSSProperties}>
       <div className="mx-auto max-w-xl px-5 pt-safe pb-28">
-        <div className="pt-5">
-          <WeekStreak completedDays={completedDays} today={today} />
-        </div>
+        <WeekStreak completedDays={completedDays} today={today} />
 
-        <header className="pt-8">
+        <header className="pt-6">
           <p className="text-xs font-light uppercase tracking-[0.25em] text-muted">
             {parseDay(today).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>

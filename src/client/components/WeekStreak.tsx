@@ -4,13 +4,15 @@ import { cx } from './ui';
 
 const DAYS = 7;
 
-/** The last seven days as dot — dot — dot, filled where everything was completed. */
+/** The last seven days as dot — dot — dot, filled where everything was completed. Hidden if none were. */
 export function WeekStreak({ completedDays, today }: { completedDays: Set<string>; today: string }) {
   const days = Array.from({ length: DAYS }, (_, i) => addDays(today, i - (DAYS - 1)));
   const done = days.filter(d => completedDays.has(d));
+  // Nothing completed this week: show nothing rather than a row of empty dots.
+  if (done.length === 0) return null;
 
   return (
-    <section className="flex items-center gap-4" aria-label={`Completed ${done.length} of the last ${DAYS} days`}>
+    <section className="mb-2 flex items-center gap-4 pt-5" aria-label={`Completed ${done.length} of the last ${DAYS} days`}>
       <ol className="grid flex-1 grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr_auto_1fr_auto] items-center gap-y-1.5">
         {days.map((day, i) => {
           const complete = completedDays.has(day);
