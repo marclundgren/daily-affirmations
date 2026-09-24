@@ -28,7 +28,7 @@ Each affirmation's color comes from its place in the library, running from blue 
 ## Running it
 
 ```sh
-docker compose up -d --build        # http://127.0.0.1:4410, data in the "data" volume
+docker compose up -d --build        # http://<host>.local:4410 on the LAN, data in the "data" volume
 sudo tailscale serve --bg 4410      # https://<machine>.<tailnet>.ts.net
 ```
 

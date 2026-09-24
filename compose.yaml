@@ -4,9 +4,9 @@ services:
     image: daily-affirmations
     container_name: daily-affirmations
     restart: unless-stopped
-    # Only reachable from this machine; Tailscale Serve provides HTTPS to the tailnet.
+    # Reachable on the LAN over HTTP; Tailscale Serve adds HTTPS (needed for the mic).
     ports:
-      - 127.0.0.1:4410:4410
+      - 4410:4410
     env_file:
       - path: .env
         required: false
