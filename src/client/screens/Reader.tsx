@@ -4,7 +4,8 @@ import type { Affirmation } from '../../shared/types';
 import { parseDocument } from '../../shared/markdown';
 import { useStore } from '../lib/store';
 import { usePrefs } from '../lib/prefs';
-import { useFollowAlong } from '../lib/useFollowAlong';
+import { useFollowAlong } from '../lib/speech/useFollowAlong';
+import { useVoicePreload, useVoiceStatus } from '../lib/speech/useVoiceStatus';
 import { AffirmationText } from '../components/AffirmationText';
 import { Icon } from '../components/Icon';
 import { Button, IconButton, cx } from '../components/ui';
@@ -16,6 +17,7 @@ export function Reader() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { due, affirmations, isRead, streak, hueOf } = useStore();
+  useVoicePreload('load');
 
   // Read today's list in order; an affirmation not scheduled today is read on its own.
   const standalone = !due.some(a => a.id === Number(id));
@@ -76,7 +78,7 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
   const advanceTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const touchStart = useRef<number | null>(null);
 
-  const follow = useFollowAlong(doc.targets, () => {
+  const follow = useFollowAlong(doc, () => {
     setRead(affirmation.id, true);
     setCelebrate(true);
     if (autoAdvance) advanceTimer.current = setTimeout(onNext, ADVANCE_DELAY_MS);
@@ -97,7 +99,7 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
     else if (dx < -SWIPE_DISTANCE) onNext();
   };
 
-  const following = follow.listening || follow.cursor > 0;
+  const following = follow.state !== 'idle' || follow.cursor > 0;
 
   return (
     <>
@@ -116,16 +118,7 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
 
       <footer className="px-6 pb-safe">
         <p className="mb-3 min-h-5 text-center text-sm text-muted" aria-live="polite">
-          {follow.error ??
-            (celebrate && read
-              ? 'Beautiful.'
-              : follow.listening
-                ? 'Listening… read it aloud'
-                : follow.supported
-                  ? read
-                    ? 'Read. Tap the mic to say it again.'
-                    : 'Tap the mic and read aloud'
-                  : '')}
+          {celebrate && read ? 'Beautiful.' : <FollowHint follow={follow} read={read} />}
         </p>
         <div className="mx-auto flex max-w-xs items-center justify-between">
           <button
@@ -140,19 +133,23 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
             <Icon name="check" className={cx('size-6', celebrate && read && 'animate-pop')} strokeWidth={2.5} />
           </button>
 
-          {follow.supported ? (
-            <button
-              onClick={follow.listening ? follow.stop : follow.start}
-              aria-label={follow.listening ? 'Stop listening' : 'Read aloud'}
-              className="relative grid size-20 place-items-center rounded-full bg-hue text-bg shadow-[0_0_40px_-8px] shadow-hue transition active:scale-95"
-            >
-              {follow.listening && <span className="absolute inset-0 rounded-full bg-hue animate-pulse-ring" aria-hidden />}
-              <Icon name={follow.listening ? 'stop' : 'mic'} className="relative size-8" />
-            </button>
-          ) : (
+          {follow.unavailable ? (
             <Button onClick={() => (read ? onNext() : toggleRead())} className="h-14 px-8">
               {read ? 'Next' : 'I said it'}
             </Button>
+          ) : (
+            <button
+              onClick={follow.state === 'idle' ? follow.start : follow.stop}
+              aria-label={follow.state === 'idle' ? 'Read aloud' : 'Stop listening'}
+              className="relative grid size-20 place-items-center rounded-full bg-hue text-bg shadow-[0_0_40px_-8px] shadow-hue transition active:scale-95"
+            >
+              {follow.state === 'listening' && <span className="absolute inset-0 rounded-full bg-hue animate-pulse-ring" aria-hidden />}
+              {follow.state === 'starting' ? (
+                <span className="size-7 animate-spin rounded-full border-[3px] border-bg/30 border-t-bg" aria-hidden />
+              ) : (
+                <Icon name={follow.state === 'listening' ? 'stop' : 'mic'} className="relative size-8" />
+              )}
+            </button>
           )}
 
           <button onClick={onNext} aria-label="Next" className="grid size-14 place-items-center rounded-full border-2 border-line text-muted transition active:scale-90">
@@ -162,6 +159,24 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
       </footer>
     </>
   );
+}
+
+function FollowHint({ follow, read }: { follow: ReturnType<typeof useFollowAlong>; read: boolean }) {
+  const voice = useVoiceStatus();
+  if (follow.error) return <>{follow.error}</>;
+  if (follow.state === 'starting') {
+    return <>{voice.state === 'downloading' ? `Downloading voice model… ${Math.round(voice.progress * 100)}%` : 'Getting ready…'}</>;
+  }
+  if (follow.state === 'listening') {
+    return (
+      <>
+        Listening… read it aloud
+        {follow.engine === 'device' && <span className="ml-1.5 text-faint">· on this device</span>}
+      </>
+    );
+  }
+  if (follow.unavailable) return <>Read it aloud, then tap “I said it”</>;
+  return <>{read ? 'Read. Tap the mic to say it again.' : 'Tap the mic and read aloud'}</>;
 }
 
 function Finale({ streak, onDone }: { streak: number; onDone: () => void }) {

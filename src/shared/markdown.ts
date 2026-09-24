@@ -37,8 +37,10 @@ export interface RenderBlock {
 
 export interface Document {
   blocks: RenderBlock[];
-  /** Words the reader is expected to say, in order. */
+  /** Words the reader is expected to say, in order, normalized for matching. */
   targets: string[];
+  /** The same words as a recognizer's vocabulary spells them (lowercase, apostrophes kept). */
+  vocabulary: string[];
 }
 
 function parseInline(text: string): Span[] {
@@ -98,11 +100,17 @@ export function normalizeWord(word: string): string {
   return word.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]/gu, '');
 }
 
+/** "Isn’t," → "isn't" */
+export function vocabularyWord(word: string): string {
+  return word.toLowerCase().replace(/[’‘]/g, "'").replace(/[^\p{L}\p{N}']/gu, '').replace(/^'+|'+$/g, '');
+}
+
 export function parseDocument(markdown: string): Document {
   const parsed = parseBlocks(markdown);
   // If the text has quotes, only the quotes are spoken. Otherwise, all of it is.
   const spokenKinds: BlockKind[] = parsed.some(b => b.kind === 'quote') ? ['quote'] : ['p', 'li', 'h'];
   const targets: string[] = [];
+  const vocabulary: string[] = [];
 
   const blocks = parsed.map(block => {
     const spoken = spokenKinds.includes(block.kind);
@@ -113,13 +121,16 @@ export function parseDocument(markdown: string): Document {
         const word = normalizeWord(piece);
         const isTarget = spoken && word.length > 0;
         tokens.push({ text: piece, strong: span.strong, em: span.em, target: isTarget ? targets.length : null });
-        if (isTarget) targets.push(word);
+        if (isTarget) {
+          targets.push(word);
+          vocabulary.push(vocabularyWord(piece));
+        }
       }
     }
     return { kind: block.kind, tokens };
   });
 
-  return { blocks, targets };
+  return { blocks, targets, vocabulary };
 }
 
 /** First spoken sentence, as plain text — used for list previews. */

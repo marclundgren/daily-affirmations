@@ -10,7 +10,7 @@ interface Props {
 function Word({ token, cursor }: { token: Token; cursor: number | null }) {
   const pending = cursor !== null && token.target !== null && token.target >= cursor;
   const classes = [
-    'transition-opacity duration-300',
+    'transition-opacity duration-150',
     token.strong && 'font-bold text-hue glow',
     token.em && 'italic',
     pending && 'opacity-30',

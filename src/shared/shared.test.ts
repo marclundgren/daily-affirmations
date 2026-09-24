@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDocument, previewText } from './markdown';
-import { advance } from './follow';
+import { advance, isComplete } from './follow';
 import { isDue, streak, dayKey, describeSchedule } from './schedule';
 import type { Affirmation } from './types';
 
@@ -57,4 +57,19 @@ test('streak counts back from today or yesterday', () => {
   assert.equal(streak(new Set(['2026-09-24', '2026-09-23', '2026-09-21']), today), 2);
   assert.equal(streak(new Set(['2026-09-23', '2026-09-22']), today), 2);
   assert.equal(streak(new Set(['2026-09-20']), today), 0);
+});
+
+test('vocabulary keeps apostrophes for the recognizer', () => {
+  const doc = parseDocument('> Release what isn’t mine.');
+  assert.deepEqual(doc.vocabulary, ['release', 'what', "isn't", 'mine']);
+  assert.deepEqual(doc.targets, ['release', 'what', 'isnt', 'mine']);
+});
+
+test('completion allows one missed final word after a pause', () => {
+  const targets = ['i', 'am', 'calm', 'and', 'ready'];
+  assert.equal(isComplete(targets, 5, false), true);
+  assert.equal(isComplete(targets, 4, false), false);
+  assert.equal(isComplete(targets, 4, true), true);
+  assert.equal(isComplete(targets, 3, true), false);
+  assert.equal(isComplete(['be', 'calm'], 1, true), false);
 });

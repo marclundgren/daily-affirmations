@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
 import { StoreProvider, useStore } from './lib/store';
 import { usePrefs, useThemeEffect } from './lib/prefs';
+import { useVoicePreload } from './lib/speech/useVoiceStatus';
 import { TabBar } from './components/TabBar';
 import { Welcome } from './screens/Welcome';
 import { Today } from './screens/Today';
@@ -14,6 +15,7 @@ const TAB_ROUTES = ['/', '/library', '/settings'];
 function Shell() {
   const { ready, error, clearError, profile } = useStore();
   const { pathname } = useLocation();
+  useVoicePreload('download');
 
   if (!ready) {
     return error ? (

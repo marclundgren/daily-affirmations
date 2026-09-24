@@ -3,7 +3,7 @@
 A small, self-hosted, mobile-first app for reading your affirmations every day, together.
 
 - **Today** shows what's due (daily, weekly on chosen weekdays, or monthly on chosen dates), your progress and your streak. Progress resets at local midnight.
-- **Read aloud:** tap the mic and the words light up as you say them. When you reach the end, it's marked read and the next one opens.
+- **Read aloud:** tap the mic and the words light up as you say them. When you reach the end, it's marked read and the next one opens. Speech is recognized **on the device** by default (Vosk, WebAssembly, ~40 MB model downloaded once in the background), so audio never leaves the phone. If that's unavailable, it falls back to the browser's recognizer, and without a microphone it shows an "I said it" button.
 - **Library** is where you write, schedule, pause and reorder affirmations. You can import one from a screenshot (needs an Anthropic API key).
 - **People:** everyone shares the library, and each person has their own progress. There are no accounts; each device remembers who's reading.
 
@@ -49,4 +49,6 @@ npm run typecheck
 | --- | --- |
 | `src/shared/` | Types and pure logic shared by client and server: scheduling, the markdown subset, speech matching |
 | `src/server/` | Hono API on Node's built-in SQLite (`node:sqlite`). `defaults.ts` seeds an empty database |
-| `src/client/` | React 19 + Tailwind 4. `lib/store.tsx` holds app state; `lib/useFollowAlong.ts` wraps the Web Speech API |
+| `src/client/` | React 19 + Tailwind 4. `lib/store.tsx` holds app state |
+| `src/client/lib/speech/` | Speech engines (on-device Vosk, browser Web Speech) behind one interface, and the `useFollowAlong` hook |
+| `scripts/fetch-voice-model.mjs` | Downloads and checksums the voice model (runs as part of `dev` and `build`) |

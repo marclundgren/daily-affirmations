@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useStore } from '../lib/store';
 import { usePrefs } from '../lib/prefs';
-import { speechSupported } from '../lib/useFollowAlong';
+import { useSpeechEngines } from '../lib/speech/useFollowAlong';
+import { deviceSupported } from '../lib/speech/deviceEngine';
+import { useVoiceStatus } from '../lib/speech/useVoiceStatus';
 import { ProfileForm } from '../components/ProfileForm';
 import { Button, Screen, Section, Segmented, Toggle } from '../components/ui';
 
@@ -9,6 +11,7 @@ export function Settings() {
   const { profile, profiles, selectProfile, deleteProfile } = useStore();
   const [prefs, setPrefs] = usePrefs();
   const [editing, setEditing] = useState(false);
+  const engines = useSpeechEngines();
   const others = profiles.filter(p => p.id !== profile?.id);
 
   const remove = async () => {
@@ -62,11 +65,24 @@ export function Settings() {
       <Section
         title="Reading aloud"
         footer={
-          speechSupported
-            ? 'The mic follows your voice word by word. Audio is handled by your browser’s speech recognition.'
-            : 'This browser doesn’t support speech recognition. Try Safari on iPhone or Chrome.'
+          engines.length
+            ? 'The mic follows your voice word by word. You can always tap ✓ instead.'
+            : window.isSecureContext
+              ? 'This browser can’t use the microphone here. Read aloud, then tap “I said it”.'
+              : 'The microphone only works over HTTPS. Open the app through its https:// address to read aloud.'
         }
       >
+        {deviceSupported && (
+          <div className="mb-3">
+            <Toggle
+              label="Private on-device voice"
+              description="Speech is recognized on this device and audio never leaves it. One-time 40 MB download."
+              checked={prefs.onDeviceVoice}
+              onChange={onDeviceVoice => setPrefs({ onDeviceVoice })}
+            />
+            {prefs.onDeviceVoice && <VoiceModelStatus />}
+          </div>
+        )}
         <Toggle
           label="Move on automatically"
           description="Go to the next affirmation after you finish reading one aloud"
@@ -84,4 +100,17 @@ export function Settings() {
       )}
     </Screen>
   );
+}
+
+function VoiceModelStatus() {
+  const status = useVoiceStatus();
+  const text = {
+    idle: 'The voice model downloads in the background.',
+    saved: 'Voice model saved on this device.',
+    downloading: status.state === 'downloading' ? `Downloading voice model… ${Math.round(status.progress * 100)}%` : '',
+    loading: 'Loading voice model…',
+    ready: 'Voice model ready.',
+    error: status.state === 'error' ? `Voice model unavailable (${status.message}). Using your browser’s recognition instead.` : '',
+  }[status.state];
+  return <p className="mt-2 px-1 text-xs text-faint">{text}</p>;
 }

@@ -32,6 +32,15 @@ export function wordsMatch(target: string, spoken: string): boolean {
 }
 
 /**
+ * Whether reading is done. Recognizers often miss a final word (or don't know it), so after
+ * a pause with at most one word left, that counts too — for anything longer than a few words.
+ */
+export function isComplete(targets: string[], cursor: number, afterPause: boolean): boolean {
+  if (cursor >= targets.length) return true;
+  return afterPause && targets.length > 3 && cursor >= targets.length - 1;
+}
+
+/**
  * Advance through `targets` from `cursor` using a transcript. Each spoken word may
  * match one of the next few targets; unmatched words (filler, misrecognitions) are ignored.
  * Returns the new cursor — the count of target words read so far.

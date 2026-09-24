@@ -5,10 +5,12 @@ export interface Prefs {
   profileId: number | null;
   theme: 'system' | 'light' | 'dark';
   autoAdvance: boolean;
+  /** Recognize speech on this device instead of the browser's (cloud) recognizer. */
+  onDeviceVoice: boolean;
 }
 
 const KEY = 'daily-affirmations:prefs';
-const DEFAULTS: Prefs = { profileId: null, theme: 'system', autoAdvance: true };
+const DEFAULTS: Prefs = { profileId: null, theme: 'system', autoAdvance: true, onDeviceVoice: true };
 const listeners = new Set<() => void>();
 
 function read(): Prefs {
