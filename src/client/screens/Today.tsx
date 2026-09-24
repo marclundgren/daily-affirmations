@@ -4,6 +4,7 @@ import { previewText } from '../../shared/markdown';
 import { parseDay } from '../../shared/schedule';
 import { useStore } from '../lib/store';
 import { Icon } from '../components/Icon';
+import { WeekStreak } from '../components/WeekStreak';
 import { Button, ProgressRing, cx } from '../components/ui';
 
 function greeting(hour: number) {
@@ -14,7 +15,7 @@ function greeting(hour: number) {
 }
 
 export function Today() {
-  const { profile, today, due, isRead, setRead, doneCount, streak, hueOf } = useStore();
+  const { profile, today, due, isRead, setRead, doneCount, streak, completedDays, hueOf } = useStore();
   const navigate = useNavigate();
   const allDone = due.length > 0 && doneCount === due.length;
   const nextUp = due.find(a => !isRead(a.id)) ?? due[0];
@@ -22,7 +23,11 @@ export function Today() {
   return (
     <main className="ambient min-h-dvh" style={{ '--hue': nextUp ? hueOf(nextUp.id) : 290 } as CSSProperties}>
       <div className="mx-auto max-w-xl px-5 pt-safe pb-28">
-        <header className="pt-6">
+        <div className="pt-5">
+          <WeekStreak completedDays={completedDays} today={today} />
+        </div>
+
+        <header className="pt-8">
           <p className="text-xs font-light uppercase tracking-[0.25em] text-muted">
             {parseDay(today).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>

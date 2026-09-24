@@ -3,6 +3,7 @@ import type { Affirmation, AffirmationInput, Profile, ServerConfig } from '../..
 import { addDays, dayKey, isDue, parseDay, streak } from '../../shared/schedule';
 import { api } from './api';
 import { usePrefs } from './prefs';
+import { loadCompletedDays, saveCompletedDay } from './completedDays';
 
 const HISTORY_DAYS = 120;
 const readingKey = (day: string, affirmationId: number) => `${day}|${affirmationId}`;
@@ -39,6 +40,8 @@ function useStoreValue() {
   const [error, setError] = useState<string | null>(null);
 
   const profile = profiles?.find(p => p.id === prefs.profileId) ?? null;
+  const [completedDays, setCompletedDays] = useState<Set<string>>(new Set());
+  useEffect(() => setCompletedDays(profile ? loadCompletedDays(profile.id) : new Set()), [profile?.id]);
 
   useEffect(() => {
     Promise.all([api.config(), api.profiles(), api.affirmations()])
@@ -124,15 +127,21 @@ function useStoreValue() {
     const list = affirmations ?? [];
     const due = list.filter(a => isDue(a, parseDay(today)));
     const isRead = (id: number) => readings.has(readingKey(today, id));
-    const readDays = new Set([...readings].map(k => k.split('|')[0]));
     return {
       hues: spectrum(list.filter(a => !a.archived)),
       due,
       isRead,
       doneCount: due.filter(a => isRead(a.id)).length,
-      streak: streak(readDays, today),
     };
   }, [affirmations, readings, today]);
+
+  // Record today as completed (or not) whenever today's progress changes.
+  const loadedFor = profile && readingsFor === profile.id ? profile.id : null;
+  const todayComplete = derived.due.length > 0 && derived.doneCount === derived.due.length;
+  useEffect(() => {
+    if (loadedFor === null || completedDays.has(today) === todayComplete) return;
+    setCompletedDays(saveCompletedDay(loadedFor, today, todayComplete));
+  }, [loadedFor, today, todayComplete, completedDays]);
 
   return {
     ready: profiles !== null && affirmations !== null && (!profile || readingsFor === profile.id),
@@ -151,6 +160,8 @@ function useStoreValue() {
     reorder,
     setRead,
     hueOf: (id: number) => derived.hues.get(id) ?? 290,
+    completedDays,
+    streak: streak(completedDays, today),
     ...derived,
   };
 }

@@ -158,10 +158,25 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Play one-shot animations instantly. Looping ones must stop too: a near-zero duration
+     that repeats forever flickers through random frames. */
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* A still halo instead of the breathing rings while listening. */
+  .animate-breathe {
+    animation: none !important;
+    transform: scale(1.2);
+    opacity: 0.2;
+  }
+
+  /* The countdown is information, not decoration, so it keeps its real duration. */
+  .animate-countdown {
+    animation-duration: var(--duration) !important;
   }
 }
