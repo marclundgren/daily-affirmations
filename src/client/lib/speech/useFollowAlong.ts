@@ -47,6 +47,9 @@ export function useFollowAlong(doc: Document, onComplete: () => void) {
       shown.current = Math.max(shown.current, live);
       setCursor(shown.current);
       if (isComplete(doc.targets, shown.current, isFinal)) {
+        // Light every word, including a final one the recognizer may have missed.
+        shown.current = doc.targets.length;
+        setCursor(shown.current);
         stop();
         completeRef.current();
       }

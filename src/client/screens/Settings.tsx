@@ -83,12 +83,20 @@ export function Settings() {
             {prefs.onDeviceVoice && <VoiceModelStatus />}
           </div>
         )}
-        <Toggle
-          label="Move on automatically"
-          description="Go to the next affirmation after you finish reading one aloud"
-          checked={prefs.autoAdvance}
-          onChange={autoAdvance => setPrefs({ autoAdvance })}
-        />
+        <div className="rounded-2xl bg-surface px-4 py-3.5">
+          <p className="text-[15px]">After reading aloud</p>
+          <p className="mt-0.5 mb-3 text-xs text-faint">Stay to read the rest at your own pace, or move on after a pause.</p>
+          <Segmented
+            value={String(prefs.advanceAfter)}
+            onChange={v => setPrefs({ advanceAfter: v === 'null' ? null : Number(v) })}
+            options={[
+              { value: 'null', label: 'Stay' },
+              { value: '3', label: '3 s' },
+              { value: '5', label: '5 s' },
+              { value: '10', label: '10 s' },
+            ]}
+          />
+        </div>
       </Section>
 
       {profiles.length > 1 && (

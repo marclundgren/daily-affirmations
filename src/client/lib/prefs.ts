@@ -4,13 +4,14 @@ import { useCallback, useEffect, useSyncExternalStore } from 'react';
 export interface Prefs {
   profileId: number | null;
   theme: 'system' | 'light' | 'dark';
-  autoAdvance: boolean;
+  /** Seconds to rest on a finished affirmation before moving on; null stays until you tap Next. */
+  advanceAfter: number | null;
   /** Recognize speech on this device instead of the browser's (cloud) recognizer. */
   onDeviceVoice: boolean;
 }
 
 const KEY = 'daily-affirmations:prefs';
-const DEFAULTS: Prefs = { profileId: null, theme: 'system', autoAdvance: true, onDeviceVoice: true };
+const DEFAULTS: Prefs = { profileId: null, theme: 'system', advanceAfter: null, onDeviceVoice: true };
 const listeners = new Set<() => void>();
 
 function read(): Prefs {

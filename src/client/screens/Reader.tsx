@@ -11,7 +11,8 @@ import { Icon } from '../components/Icon';
 import { Button, IconButton, cx } from '../components/ui';
 
 const SWIPE_DISTANCE = 60;
-const ADVANCE_DELAY_MS = 1100;
+/** Matches the page-out animation in styles.css. */
+const PAGE_OUT_MS = 500;
 
 export function Reader() {
   const { id } = useParams();
@@ -40,7 +41,7 @@ export function Reader() {
   };
 
   return (
-    <div className="ambient fixed inset-0 flex flex-col transition-[background] duration-700" style={{ '--hue': hueOf(aff.id) } as CSSProperties}>
+    <div className="ambient fixed inset-0 flex flex-col" style={{ '--hue': hueOf(aff.id), transition: '--hue 1.2s ease' } as CSSProperties}>
       <header className="flex items-center gap-2 px-2 pt-safe">
         <IconButton icon="close" label="Close" onClick={close} />
         <div className="flex flex-1 gap-1.5" role="tablist" aria-label="Affirmations">
@@ -71,24 +72,44 @@ export function Reader() {
 
 function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affirmation; number: number; onPrev: () => void; onNext: () => void }) {
   const { isRead, setRead } = useStore();
-  const [{ autoAdvance }] = usePrefs();
+  const [{ advanceAfter }] = usePrefs();
   const doc = useMemo(() => parseDocument(affirmation.body), [affirmation.body]);
   const [celebrate, setCelebrate] = useState(false);
   const read = isRead(affirmation.id);
-  const advanceTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const touchStart = useRef<number | null>(null);
+
+  // After reading aloud: rest on the page (for good, or for `advanceAfter` seconds), then turn it.
+  // Any interaction cancels the turn.
+  const [phase, setPhase] = useState<'reading' | 'resting' | 'turning'>('reading');
+  const restMs = advanceAfter === null ? null : advanceAfter * 1000;
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const cancelTurn = () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    setPhase('reading');
+  };
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const follow = useFollowAlong(doc, () => {
     setRead(affirmation.id, true);
     setCelebrate(true);
-    if (autoAdvance) advanceTimer.current = setTimeout(onNext, ADVANCE_DELAY_MS);
+    setPhase('resting');
+    if (restMs === null) return;
+    timers.current = [
+      setTimeout(() => setPhase('turning'), restMs),
+      setTimeout(onNext, restMs + PAGE_OUT_MS),
+    ];
   });
 
-  useEffect(() => () => clearTimeout(advanceTimer.current), []);
-
   const toggleRead = () => {
+    cancelTurn();
     setRead(affirmation.id, !read);
     setCelebrate(!read);
+  };
+
+  const listen = () => {
+    cancelTurn();
+    follow.start();
   };
 
   const onTouchEnd = (e: TouchEvent) => {
@@ -108,7 +129,12 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
         onTouchStart={e => (touchStart.current = e.touches[0].clientX)}
         onTouchEnd={onTouchEnd}
       >
-        <article className="mx-auto flex min-h-full max-w-lg flex-col justify-center px-7 py-10 text-center animate-rise">
+        <article
+          className={cx(
+            'mx-auto flex min-h-full max-w-lg flex-col justify-center px-7 py-10 text-center',
+            phase === 'turning' ? 'animate-page-out' : 'animate-page-in',
+          )}
+        >
           <h2 className="mb-8 text-[1.35rem] leading-tight font-light uppercase tracking-[0.12em] text-hue">
             {number}. {affirmation.title}
           </h2>
@@ -139,11 +165,20 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
             </Button>
           ) : (
             <button
-              onClick={follow.state === 'idle' ? follow.start : follow.stop}
+              onClick={follow.state === 'idle' ? listen : follow.stop}
               aria-label={follow.state === 'idle' ? 'Read aloud' : 'Stop listening'}
-              className="relative grid size-20 place-items-center rounded-full bg-hue text-bg shadow-[0_0_40px_-8px] shadow-hue transition active:scale-95"
+              className={cx(
+                'relative grid size-20 place-items-center rounded-full transition active:scale-95',
+                // Once it's been read, the mic steps back so the next step stands out.
+                read && follow.state === 'idle' ? 'border-2 border-hue/50 text-hue' : 'bg-hue text-bg shadow-[0_0_40px_-8px] shadow-hue',
+              )}
             >
-              {follow.state === 'listening' && <span className="absolute inset-0 rounded-full bg-hue animate-pulse-ring" aria-hidden />}
+              {follow.state === 'listening' && (
+                <>
+                  <span className="absolute inset-0 rounded-full bg-hue animate-breathe" aria-hidden />
+                  <span className="absolute inset-0 rounded-full bg-hue animate-breathe [animation-delay:-1.4s]" aria-hidden />
+                </>
+              )}
               {follow.state === 'starting' ? (
                 <span className="size-7 animate-spin rounded-full border-[3px] border-bg/30 border-t-bg" aria-hidden />
               ) : (
@@ -152,12 +187,42 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
             </button>
           )}
 
-          <button onClick={onNext} aria-label="Next" className="grid size-14 place-items-center rounded-full border-2 border-line text-muted transition active:scale-90">
+          <button
+            onClick={onNext}
+            aria-label="Next"
+            className={cx(
+              'relative grid size-14 place-items-center rounded-full border-2 transition-colors duration-700 active:scale-90',
+              // Staying put: invite (don't push) the reader on once they're done.
+              phase !== 'reading' && restMs === null ? 'border-hue bg-hue text-bg' : 'border-line text-muted',
+            )}
+          >
+            {phase !== 'reading' && restMs !== null && <Countdown ms={restMs} />}
             <Icon name="next" className="size-6" />
           </button>
         </div>
       </footer>
     </>
+  );
+}
+
+/** A ring that slowly fills around the Next button while resting on a finished affirmation. */
+function Countdown({ ms }: { ms: number }) {
+  const r = 27;
+  const circumference = 2 * Math.PI * r;
+  return (
+    <svg className="absolute -inset-0.5 -rotate-90" viewBox="0 0 58 58" aria-hidden>
+      <circle
+        cx="29"
+        cy="29"
+        r={r}
+        fill="none"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        className="stroke-hue animate-countdown"
+        style={{ '--duration': `${ms}ms`, '--circumference': circumference } as CSSProperties}
+      />
+    </svg>
   );
 }
 

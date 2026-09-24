@@ -52,6 +52,13 @@
   --on-accent: #ffffff;
 }
 
+/* Registered so hue changes can animate (e.g. the reader's background between affirmations). */
+@property --hue {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 290;
+}
+
 html {
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
@@ -100,9 +107,25 @@ a {
   100% { transform: scale(1); }
 }
 
-@keyframes pulse-ring {
-  0% { transform: scale(1); opacity: 0.55; }
-  100% { transform: scale(1.7); opacity: 0; }
+/* Starts invisible and ends invisible, so each loop begins without a visible jump. */
+@keyframes breathe {
+  0% { transform: scale(1); opacity: 0; }
+  25% { opacity: 0.35; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes page-out {
+  to { transform: translateY(-12px); opacity: 0; }
+}
+
+@keyframes page-in {
+  from { transform: translateY(16px); opacity: 0; }
+}
+
+/* Fills a ring's stroke over --duration: the countdown before moving on. */
+@keyframes countdown {
+  from { stroke-dashoffset: var(--circumference); }
+  to { stroke-dashoffset: 0; }
 }
 
 @keyframes rise {
@@ -114,8 +137,20 @@ a {
   animation: pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
 }
 
-@utility animate-pulse-ring {
-  animation: pulse-ring 1.6s ease-out infinite;
+@utility animate-breathe {
+  animation: breathe 2.8s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
+}
+
+@utility animate-page-out {
+  animation: page-out 0.5s ease-in forwards;
+}
+
+@utility animate-page-in {
+  animation: page-in 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@utility animate-countdown {
+  animation: countdown var(--duration) linear forwards;
 }
 
 @utility animate-rise {
