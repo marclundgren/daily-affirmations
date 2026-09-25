@@ -105,30 +105,79 @@ export function loadModel(): Promise<Model> {
   return loading;
 }
 
+// --- Microphone --------------------------------------------------------------------------------
+
+/**
+ * One microphone for the whole reading session. iOS Safari goes quiet after a page opens and
+ * closes a few AudioContexts and mic streams in a row, so we keep them open between
+ * affirmations and only close them with `releaseMicrophone()` (when the reader closes).
+ */
+interface Microphone {
+  audio: AudioContext;
+  stream: Promise<MediaStream>;
+  /** Set once `stream` resolves, so liveness can be checked synchronously during a tap. */
+  opened?: MediaStream;
+}
+
+let mic: Microphone | null = null;
+
+const isLive = (m: Microphone) =>
+  m.audio.state !== 'closed' && (!m.opened || m.opened.getAudioTracks().some(t => t.readyState === 'live'));
+
+/** Must be called synchronously from a tap: iOS only lets audio start during one. */
+function openMicrophone(): Microphone {
+  if (mic && isLive(mic)) {
+    mic.audio.resume().catch(() => {});
+    return mic;
+  }
+  releaseMicrophone();
+  const audio = new AudioContext();
+  const opening: Microphone = {
+    audio,
+    stream: navigator.mediaDevices
+      .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } })
+      .then(
+        stream => ((opening.opened = stream), stream),
+        () => {
+          if (mic === opening) releaseMicrophone();
+          throw new MicrophoneBlockedError();
+        },
+      ),
+  };
+  return (mic = opening);
+}
+
+/** Turns the microphone off. The next recognition opens it again. */
+export function releaseMicrophone() {
+  if (!mic) return;
+  const { audio, stream } = mic;
+  mic = null;
+  stream.then(s => s.getTracks().forEach(t => t.stop())).catch(() => {});
+  audio.close().catch(() => {});
+}
+
 // --- Recognition -------------------------------------------------------------------------------
 
 const cleanText = (text: string) => text.replace(/\[unk\]/g, ' ').trim();
+
+/** If no audio arrives this long after listening starts, the microphone has gone silent. */
+const SILENT_MIC_MS = 3000;
+/** Audio chunks awaiting recognition before we drop new ones, so a slow device never falls behind. */
+const MAX_BACKLOG = 8;
 
 export const deviceEngine: SpeechEngine | null = deviceSupported
   ? {
       id: 'device',
       async start({ words, onText, onError }: TranscriberOptions): Promise<Transcriber> {
-        // iOS only allows audio to start during the tap, so create the context before awaiting anything.
-        const audio = new AudioContext();
-        const stream = await navigator.mediaDevices
-          .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } })
-          .catch(() => {
-            audio.close();
-            throw new MicrophoneBlockedError();
-          });
-        await audio.resume();
-
+        const microphone = openMicrophone();
+        const { audio } = microphone;
+        const stream = await microphone.stream;
         let model: Model;
         try {
           model = await loadModel();
         } catch (err) {
-          stream.getTracks().forEach(t => t.stop());
-          audio.close();
+          // Another engine is about to take over; don't hold the microphone it needs.
+          releaseMicrophone();
           throw err;
         }
 
@@ -136,29 +185,48 @@ export const deviceEngine: SpeechEngine | null = deviceSupported
         // makes it far more accurate for reading a known script.
         const grammar = JSON.stringify([...new Set(words), '[unk]']);
         const recognizer = new model.KaldiRecognizer(audio.sampleRate, grammar);
+        // Every chunk sent gets exactly one reply: a partial result, a result or an error.
+        let backlog = 0;
         recognizer.on('partialresult', m => {
+          backlog--;
           if (m.event === 'partialresult') onText(cleanText(m.result.partial), false);
         });
         recognizer.on('result', m => {
+          backlog--;
           if (m.event === 'result') onText(cleanText(m.result.text), true);
         });
         recognizer.on('error', m => {
+          backlog--;
           if (m.event === 'error') onError(new Error('On-device recognition stopped unexpectedly.'));
         });
 
         // ScriptProcessorNode is deprecated but is the one audio tap every browser (incl. iOS) supports.
         const source = audio.createMediaStreamSource(stream);
         const tap = audio.createScriptProcessor(4096, 1, 1);
-        tap.onaudioprocess = e => recognizer.acceptWaveform(e.inputBuffer);
+        let heard = false;
+        tap.onaudioprocess = e => {
+          heard = true;
+          if (backlog >= MAX_BACKLOG) return;
+          backlog++;
+          recognizer.acceptWaveform(e.inputBuffer);
+        };
         source.connect(tap);
         tap.connect(audio.destination);
 
+        // A suspended or interrupted AudioContext, or a muted track, looks like it's listening but hears nothing.
+        // Start the next attempt from a fresh microphone instead.
+        const watchdog = setTimeout(() => {
+          if (heard && stream.getAudioTracks().some(t => !t.muted)) return;
+          releaseMicrophone();
+          onError(new Error('The microphone isn’t picking anything up. Tap the mic to try again.'));
+        }, SILENT_MIC_MS);
+
         return {
           stop() {
+            clearTimeout(watchdog);
+            tap.onaudioprocess = null;
             tap.disconnect();
             source.disconnect();
-            stream.getTracks().forEach(t => t.stop());
-            audio.close();
             recognizer.remove();
           },
         };

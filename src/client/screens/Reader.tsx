@@ -6,6 +6,7 @@ import { useStore } from '../lib/store';
 import { usePrefs } from '../lib/prefs';
 import { useFollowAlong } from '../lib/speech/useFollowAlong';
 import { useVoicePreload, useVoiceStatus } from '../lib/speech/useVoiceStatus';
+import { releaseMicrophone } from '../lib/speech/deviceEngine';
 import { AffirmationText } from '../components/AffirmationText';
 import { Icon } from '../components/Icon';
 import { Button, IconButton, cx } from '../components/ui';
@@ -19,6 +20,8 @@ export function Reader() {
   const navigate = useNavigate();
   const { due, affirmations, isRead, streak, hueOf } = useStore();
   useVoicePreload('load');
+  // The microphone stays open from one affirmation to the next; turn it off on the way out.
+  useEffect(() => releaseMicrophone, []);
 
   // Read today's list in order; an affirmation not scheduled today is read on its own.
   const standalone = !due.some(a => a.id === Number(id));
@@ -101,10 +104,10 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
     ];
   });
 
-  const toggleRead = () => {
+  const markRead = () => {
     cancelTurn();
-    setRead(affirmation.id, !read);
-    setCelebrate(!read);
+    setRead(affirmation.id, true);
+    setCelebrate(true);
   };
 
   const listen = () => {
@@ -146,21 +149,12 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
         <p className="mb-3 min-h-5 text-center text-sm text-muted" aria-live="polite">
           {celebrate && read ? 'Beautiful.' : <FollowHint follow={follow} read={read} />}
         </p>
-        <div className="mx-auto flex max-w-xs items-center justify-between">
-          <button
-            onClick={toggleRead}
-            aria-label={read ? 'Mark as not read' : 'Mark as read'}
-            aria-pressed={read}
-            className={cx(
-              'grid size-14 place-items-center rounded-full border-2 transition active:scale-90',
-              read ? 'border-hue bg-hue text-bg' : 'border-line text-muted',
-            )}
-          >
-            <Icon name="check" className={cx('size-6', celebrate && read && 'animate-pop')} strokeWidth={2.5} />
-          </button>
+        {/* The mic sits in the middle; an empty cell on the left keeps it centered. */}
+        <div className="mx-auto grid max-w-xs grid-cols-[1fr_auto_1fr] items-center">
+          <span />
 
           {follow.unavailable ? (
-            <Button onClick={() => (read ? onNext() : toggleRead())} className="h-14 px-8">
+            <Button onClick={() => (read ? onNext() : markRead())} className="h-14 px-8">
               {read ? 'Next' : 'I said it'}
             </Button>
           ) : (
@@ -191,7 +185,7 @@ function ReaderCard({ affirmation, number, onPrev, onNext }: { affirmation: Affi
             onClick={onNext}
             aria-label="Next"
             className={cx(
-              'relative grid size-14 place-items-center rounded-full border-2 transition-colors duration-700 active:scale-90',
+              'relative grid size-14 place-items-center justify-self-end rounded-full border-2 transition-colors duration-700 active:scale-90',
               // Staying put: invite (don't push) the reader on once they're done.
               phase !== 'reading' && restMs === null ? 'border-hue bg-hue text-bg' : 'border-line text-muted',
             )}
