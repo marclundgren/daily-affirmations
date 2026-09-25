@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    image: daily-affirmations
+    container_name: daily-affirmations
+    restart: unless-stopped
+    # Reachable on the LAN over HTTP; Tailscale Serve adds HTTPS (needed for the mic).
+    ports:
+      - 4410:4410
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - data:/data
+
+volumes:
+  data:

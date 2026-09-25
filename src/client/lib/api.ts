@@ -1,52 +1,38 @@
-import type { User, Affirmation, Completion } from './types';
+import type { Affirmation, AffirmationInput, Profile, Reading, ServerConfig } from '../../shared/types';
 
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = init.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : undefined;
+  const res = await fetch(`/api${path}`, { ...init, headers });
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(error || `Request failed (${res.status})`);
+  }
+  return res.status === 204 ? (undefined as T) : res.json();
 }
 
+const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
+
 export const api = {
-  // Users
-  getUsers: () => fetchJson<User[]>('/api/users'),
-  createUser: (name: string, avatar_emoji?: string) =>
-    fetchJson<User>('/api/users', { method: 'POST', body: JSON.stringify({ name, avatar_emoji }) }),
+  config: () => request<ServerConfig>('/config'),
 
-  // Affirmations
-  getAffirmations: () => fetchJson<Affirmation[]>('/api/affirmations'),
-  getTodayAffirmations: () => fetchJson<Affirmation[]>('/api/affirmations/today'),
-  createAffirmation: (data: Partial<Affirmation>) =>
-    fetchJson<Affirmation>('/api/affirmations', { method: 'POST', body: JSON.stringify(data) }),
-  updateAffirmation: (id: number, data: Partial<Affirmation>) =>
-    fetchJson<Affirmation>(`/api/affirmations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteAffirmation: (id: number) =>
-    fetchJson<{ success: boolean }>(`/api/affirmations/${id}`, { method: 'DELETE' }),
-  reorderAffirmations: (order: number[]) =>
-    fetchJson<{ success: boolean }>('/api/affirmations/reorder', {
-      method: 'PATCH',
-      body: JSON.stringify({ order }),
-    }),
+  profiles: () => request<Profile[]>('/profiles'),
+  createProfile: (p: Omit<Profile, 'id'>) => request<Profile>('/profiles', json('POST', p)),
+  updateProfile: ({ id, ...p }: Profile) => request<Profile>(`/profiles/${id}`, json('PUT', p)),
+  deleteProfile: (id: number) => request<void>(`/profiles/${id}`, { method: 'DELETE' }),
 
-  // Completions
-  getCompletions: (userId: number, date: string) =>
-    fetchJson<Completion[]>(`/api/completions?user_id=${userId}&date=${date}`),
-  markComplete: (userId: number, affirmationId: number) =>
-    fetchJson<Completion>('/api/completions', {
-      method: 'POST',
-      body: JSON.stringify({ user_id: userId, affirmation_id: affirmationId }),
-    }),
-  undoComplete: (completionId: number) =>
-    fetchJson<{ success: boolean }>(`/api/completions/${completionId}`, { method: 'DELETE' }),
+  readings: (profileId: number, since: string) => request<Reading[]>(`/profiles/${profileId}/readings?since=${since}`),
+  setReading: (profileId: number, day: string, affirmationId: number, read: boolean) =>
+    request<void>(`/profiles/${profileId}/readings/${day}/${affirmationId}`, json('PUT', { read })),
 
-  // Extract affirmation from image
-  extractFromImage: async (file: File): Promise<{ title: string; body: string; error?: string }> => {
-    const formData = new FormData();
-    formData.append('image', file);
-    const res = await fetch('/api/extract-affirmation', { method: 'POST', body: formData });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    return res.json();
+  affirmations: () => request<Affirmation[]>('/affirmations'),
+  createAffirmation: (a: AffirmationInput) => request<Affirmation>('/affirmations', json('POST', a)),
+  updateAffirmation: (id: number, a: AffirmationInput) => request<Affirmation>(`/affirmations/${id}`, json('PUT', a)),
+  deleteAffirmation: (id: number) => request<void>(`/affirmations/${id}`, { method: 'DELETE' }),
+  reorder: (ids: number[]) => request<void>('/affirmations/order', json('PUT', { ids })),
+
+  importImage: (image: Blob) => {
+    const form = new FormData();
+    form.append('image', image);
+    return request<Pick<Affirmation, 'title' | 'body'>>('/import', { method: 'POST', body: form });
   },
 };
